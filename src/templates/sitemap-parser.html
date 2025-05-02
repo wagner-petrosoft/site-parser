@@ -1,6 +1,8 @@
 <!doctype html>
 <html>
   <head>
+    <script src="{{ url_for('static', filename='js/main.js') }}" defer></script>
+
     <script
       src="{{ url_for('static', filename='js/posthog.js') }}"
       defer
@@ -139,7 +141,7 @@
   <body>
     <div class="container">
       <h1>🔗 Sitemap Parser</h1>
-      <form onsubmit="parseSitemap(event)">
+      <form onsubmit="event.preventDefault(); parseSitemap();">
         <div class="input-group">
           <input
             type="text"
@@ -163,64 +165,5 @@
         <!-- Results will be injected here -->
       </div>
     </div>
-
-    <script>
-      function parseSitemap() {
-        event.preventDefault(); // Prevent form submission reload
-        const url = document.getElementById('sitemapUrl').value;
-        const resultsDiv = document.getElementById('results');
-
-        resultsDiv.innerHTML = `
-                <div class="loading">
-                    <div class="spinner"></div>
-                    Processing sitemap...
-                </div>
-            `;
-
-        fetch('/parse', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: url }),
-        })
-          .then((response) => response.json())
-          .then((data) => {
-            if (data.success) {
-              let html = `
-                        <div class="result-box">
-                            <button class="copy-btn" onclick="copyResults()">
-                                <span class="material-icons">content_copy</span>
-                                Copy
-                            </button>
-                            <h3>Found ${data.urls.length} URLs:</h3>
-                            ${data.urls
-                              .map(
-                                (url) => `
-                                <div class="url-item">${url}</div>
-                            `,
-                              )
-                              .join('')}
-                        </div>
-                    `;
-              resultsDiv.innerHTML = html;
-            } else {
-              resultsDiv.innerHTML = `<div class="error">Error: ${data.error}</div>`;
-            }
-          })
-          .catch((error) => {
-            resultsDiv.innerHTML = `<div class="error">Request failed: ${error}</div>`;
-          });
-      }
-
-      function copyResults() {
-        const urls = Array.from(document.querySelectorAll('.url-item'))
-          .map((item) => item.textContent)
-          .join('\n');
-
-        navigator.clipboard
-          .writeText(urls)
-          .then(() => alert('URLs copied to clipboard!'))
-          .catch((err) => alert('Failed to copy URLs'));
-      }
-    </script>
   </body>
 </html>
