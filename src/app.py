@@ -18,7 +18,6 @@ def create_app():
     def index():
         return render_template("sitemap-parser.html")
 
-    print(app.view_functions.keys())
     # Security setup
     configure_security(app)
 
