@@ -1,0 +1,143 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Job Management</title>
+
+    <script
+      src="{{ url_for('static', filename='js/posthog.js') }}"
+      defer
+    ></script>
+
+    <link
+      href="https://fonts.googleapis.com/icon?family=Material+Icons"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css?family=Roboto:300,400,500"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --mdc-theme-primary: #6200ee;
+        --mdc-theme-secondary: #018786;
+      }
+      body {
+        font-family: 'Roboto', sans-serif;
+        margin: 0;
+        padding: 24px;
+      }
+      .job-card {
+        margin: 16px 0;
+        padding: 16px;
+        border-radius: 4px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .job-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .status-badge {
+        padding: 4px 8px;
+        border-radius: 12px;
+        font-size: 12px;
+        color: white;
+      }
+      .status-running {
+        background: #018786;
+      }
+      .status-completed {
+        background: #4caf50;
+      }
+      .status-failed {
+        background: #f44336;
+      }
+      .status-pending {
+        background: #ff9800;
+      }
+      .status-aborted {
+        background: #9e9e9e;
+      }
+      .mdc-button {
+        margin-left: 8px;
+      }
+      #refresh-btn {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Crawl Jobs</h1>
+    <div id="jobs-list">
+      <!-- Dynamic content will go here -->
+    </div>
+
+    <button id="refresh-btn" class="mdc-button mdc-button--raised">
+      <span class="material-icons mdc-button__icon">refresh</span>
+      Refresh
+    </button>
+
+    <script>
+      function updateJobs() {
+        fetch('api/v1/jobs')
+          .then((res) => res.json())
+          .then((jobs) => {
+            const container = document.getElementById('jobs-list');
+            container.innerHTML = jobs
+              .map(
+                (job) => `
+                        <div class="job-card">
+                            <div>
+                                <h3>${job.start_url}</h3>
+                                <div class="job-status">
+                                    <span class="status-badge status-${job.status.toLowerCase()}">
+                                        ${job.status}
+                                    </span>
+                                    <span>${job.progress}</span>
+                                    <span>${new Date(job.created_at).toLocaleString()}</span>
+                                </div>
+                            </div>
+                            ${
+                              job.status === 'running'
+                                ? `
+                                <button 
+                                    onclick="stopJob('${job.id}')" 
+                                    class="mdc-button mdc-button--outlined"
+                                >
+                                    <span class="material-icons mdc-button__icon">stop</span>
+                                    Stop
+                                </button>
+                            `
+                                : ''
+                            }
+                        </div>
+                    `,
+              )
+              .join('');
+          });
+      }
+
+      function stopJob(jobId) {
+        fetch(`api/v1/jobs/${jobId}/stop`, { method: 'POST' }).then(() =>
+          updateJobs(),
+        );
+      }
+
+      // Initial load
+      updateJobs();
+
+      // Auto-refresh every 5 seconds
+      setInterval(updateJobs, 5000);
+
+      // Manual refresh
+      document
+        .getElementById('refresh-btn')
+        .addEventListener('click', updateJobs);
+    </script>
+  </body>
+</html>

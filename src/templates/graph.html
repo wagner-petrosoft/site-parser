@@ -1,0 +1,233 @@
+<!doctype html>
+<html>
+  <head>
+    <title>URL Graph - Job ${job_id}</title>
+    <link
+      href="https://fonts.googleapis.com/icon?family=Material+Icons"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css?family=Roboto:300,400,500"
+      rel="stylesheet"
+    />
+    <script src="https://unpkg.com/vis-network@9.1.2/dist/vis-network.min.js"></script>
+    <style>
+      :root {
+        --mdc-theme-primary: #6200ee;
+        --mdc-theme-secondary: #018786;
+      }
+      body {
+        font-family: 'Roboto', sans-serif;
+        margin: 0;
+        padding: 0;
+      }
+      #graph-container {
+        width: 100%;
+        height: 70vh;
+        border: 1px solid #e0e0e0;
+        border-radius: 4px;
+      }
+      .controls {
+        padding: 16px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+      }
+      .slider-container {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .mdc-slider {
+        width: 100%;
+      }
+      .filter-value {
+        min-width: 40px;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="mdc-top-app-bar">
+      <div class="mdc-top-app-bar__row">
+        <section class="mdc-top-app-bar__section">
+          <h1 class="mdc-top-app-bar__title">URL Graph - Job {{ job_id }}</h1>
+        </section>
+      </div>
+    </div>
+
+    <main class="main-content">
+      <div class="controls">
+        <div class="slider-container">
+          <span>Min Out Links:</span>
+          <div class="mdc-slider" id="out-links-slider">
+            <input
+              class="mdc-slider__input"
+              type="range"
+              min="0"
+              max="10"
+              value="0"
+            />
+          </div>
+          <span class="filter-value" id="out-links-value">0</span>
+        </div>
+
+        <div class="slider-container">
+          <span>Min In Links:</span>
+          <div class="mdc-slider" id="in-links-slider">
+            <input
+              class="mdc-slider__input"
+              type="range"
+              min="0"
+              max="10"
+              value="0"
+            />
+          </div>
+          <span class="filter-value" id="in-links-value">0</span>
+        </div>
+      </div>
+
+      <div id="graph-container"></div>
+      <div id="loading">Loading graph data...</div>
+    </main>
+
+    <script>
+      // Initialize network
+      const container = document.getElementById('graph-container');
+      const options = {
+        nodes: {
+          shape: 'dot',
+          size: 42,
+          font: {
+            size: 12,
+            face: 'Roboto',
+          },
+          borderWidth: 2,
+        },
+        edges: {
+          width: 1.5,
+          smooth: {
+            type: 'continuous',
+          },
+        },
+        physics: {
+          stabilization: {
+            iterations: 100,
+          },
+        },
+      };
+
+      const network = new vis.Network(container, {}, options);
+      let allNodes = new vis.DataSet();
+      let allEdges = new vis.DataSet();
+      let maxInLinks = 0;
+      let maxOutLinks = 0;
+
+      // Load data in chunks
+      function loadGraphData() {
+        fetch('/api/v1/graph/{{ job_id }}/data').then((response) => {
+          const reader = response.body.getReader();
+          let partialData = '';
+
+          function processChunk({ done, value }) {
+            if (done) {
+              applyFilters();
+              return;
+            }
+
+            partialData += new TextDecoder().decode(value);
+
+            try {
+              const data = JSON.parse(partialData + ']}'); // Temporary close
+              if (data.nodes) {
+                allNodes.update(data.nodes);
+              }
+              if (data.edges) {
+                allEdges.update(data.edges);
+                updateLinkCounts(data.edges);
+              }
+              network.setData({ nodes: allNodes, edges: allEdges });
+              partialData = '';
+            } catch (e) {
+              // Incomplete JSON, wait for next chunk
+            }
+
+            return reader.read().then(processChunk);
+          }
+
+          return reader.read().then(processChunk);
+        });
+      }
+
+      // Calculate link counts for filtering
+      function updateLinkCounts(edges) {
+        const counts = { in: {}, out: {} };
+
+        edges.forEach((edge) => {
+          counts.out[edge.source] = (counts.out[edge.source] || 0) + 1;
+          counts.in[edge.target] = (counts.in[edge.target] || 0) + 1;
+        });
+
+        allNodes.update(
+          allNodes.get().map((node) => ({
+            id: node.id,
+            in_links: counts.in[node.id] || 0,
+            out_links: counts.out[node.id] || 0,
+          })),
+        );
+
+        maxInLinks = Math.max(...Object.values(counts.in).concat([0]));
+        maxOutLinks = Math.max(...Object.values(counts.out).concat([0]));
+
+        document.getElementById('out-links-slider').querySelector('input').max =
+          maxOutLinks;
+        document.getElementById('in-links-slider').querySelector('input').max =
+          maxInLinks;
+      }
+
+      // Apply filters based on slider values
+      function applyFilters() {
+        const minOut = parseInt(
+          document.getElementById('out-links-slider').querySelector('input')
+            .value,
+        );
+        const minIn = parseInt(
+          document.getElementById('in-links-slider').querySelector('input')
+            .value,
+        );
+
+        document.getElementById('out-links-value').textContent =
+          minOut === maxOutLinks ? 'Off' : minOut;
+        document.getElementById('in-links-value').textContent =
+          minIn === maxInLinks ? 'Off' : minIn;
+
+        const filteredNodes = allNodes.get({
+          filter: (node) =>
+            (minOut === maxOutLinks || node.out_links >= minOut) &&
+            (minIn === maxInLinks || node.in_links >= minIn),
+        });
+
+        const visibleIds = new Set(filteredNodes.map((n) => n.id));
+        const filteredEdges = allEdges.get({
+          filter: (edge) =>
+            visibleIds.has(edge.from) && visibleIds.has(edge.to),
+        });
+
+        network.setData({
+          nodes: filteredNodes,
+          edges: filteredEdges,
+        });
+      }
+
+      // Initialize sliders
+      document.querySelectorAll('.mdc-slider input').forEach((slider) => {
+        slider.addEventListener('input', () => {
+          applyFilters();
+        });
+      });
+
+      // Start loading
+      loadGraphData();
+    </script>
+  </body>
+</html>

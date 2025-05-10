@@ -1,1 +1,11 @@
-**/node_modules/
+*/bin/
+.env
+build
+**/__pycache__
+bin/
+lib
+lib64
+include
+**/node_modules
+
+

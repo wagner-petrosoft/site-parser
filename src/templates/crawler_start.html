@@ -1,0 +1,43 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Start New Crawl</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 600px;
+        margin: 2rem auto;
+      }
+      .form-group {
+        margin-bottom: 1rem;
+      }
+      input[type='text'] {
+        width: 100%;
+        padding: 0.5rem;
+      }
+      button {
+        background: #1e88e5;
+        color: white;
+        border: none;
+        padding: 0.5rem 1rem;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Start Website Crawl</h1>
+    <form action="/crawl-urls" method="POST">
+      <div class="form-group">
+        <label for="url">Website URL:</label>
+        <input
+          type="text"
+          id="url"
+          name="url"
+          placeholder="https://example.com"
+          required
+        />
+      </div>
+      <button type="submit">Start Crawling</button>
+    </form>
+  </body>
+</html>

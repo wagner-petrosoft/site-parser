@@ -1,0 +1,72 @@
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: strongpassword
+      POSTGRES_DB: sitemap_parser
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./config/postgresql.prod.conf:/etc/postgresql/postgresql.conf
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d sitemap_parser"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+      - ./config/redis.prod.conf:/usr/local/etc/redis/redis.conf  
+    command: redis-server /usr/local/etc/redis/redis.conf
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    image: sitemap-parser:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - FLASK_ENV=production
+      - DATABASE_URL=postgresql://app:strongpassword@postgres/sitemap_parser
+      - REDIS_URL=redis://redis:6379/0
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./src:/app/src:ro
+      - ./static:/app/static:ro
+      - ./templates:/app/templates:ro
+    command: >  
+      gunicorn --bind 0.0.0.0:5000 --workers 4 --timeout 120 src.app:create_app()
+  # sh -c "alembic upgrade head &&
+
+  celery-worker:
+    image: sitemap-parser:latest
+    depends_on:
+      - redis
+      - postgres
+    volumes:
+      - ./config:/app/config:ro
+    environment:
+      - FLASK_ENV=production
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - DATABASE_URL=postgresql://app:strongpassword@postgres/sitemap_parser
+    command: celery -A src.tasks.crawler worker --loglevel=info
+
+volumes:
+  postgres_data:
+  redis_data:

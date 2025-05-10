@@ -1,0 +1,22 @@
+<div class="results-container">
+  <div>
+    <h3>
+      Internal Links (<span id="internal-count">{{ internal_count }}</span>)
+    </h3>
+    <div class="url-list">
+      {% for url in internal_urls %}
+      <div class="url-item">{{ url }}</div>
+      {% endfor %}
+    </div>
+  </div>
+  <div>
+    <h3>
+      External Links (<span id="external-count">{{ external_count }}</span>)
+    </h3>
+    <div class="url-list">
+      {% for url in external_urls %}
+      <div class="url-item external">{{ url }}</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
