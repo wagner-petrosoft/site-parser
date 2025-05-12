@@ -43,14 +43,12 @@ services:
       - FLASK_ENV=production
       - DATABASE_URL=postgresql://app:strongpassword@postgres/sitemap_parser
       - REDIS_URL=redis://redis:6379/0
-    ports:
-      - "443:5000"
     volumes:
       - ./src:/app/src:ro
       - ./static:/app/static:ro
       - ./templates:/app/templates:ro
     command: >  
-      gunicorn --bind 0.0.0.0:5000 --workers 4 --timeout 120 src.app:create_app()
+      gunicorn --bind 0.0.0.0:5000 --workers 4 --timeout 120 src.app:app
   # sh -c "alembic upgrade head &&
 
   celery-worker:
