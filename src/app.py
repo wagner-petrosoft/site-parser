@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, abort
+from flask import Flask, render_template, request, redirect, abort
 from posthog import Posthog
 from src.database import run_migrations, SessionLocal
 from src.models import CrawlJob, UrlNode
@@ -61,8 +61,8 @@ def create_app():
 
                 # 2. Start async task AFTER commit
                 crawl_website.apply_async(
-                    args=[url], task_id=job.id  # Use same ID
-                )
+                    args=[url], task_id=job.id
+                )  # Use same ID
 
                 # 3. Redirect with confirmed job ID
                 return redirect("/urls-results/" + str(job.id))
