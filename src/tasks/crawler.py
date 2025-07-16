@@ -161,7 +161,6 @@ def mark_url_visited(url, job_id, db):
     """Mark URL as visited in database"""
     url_node = db.query(UrlNode).filter_by(url=url, job_id=job_id).first()
     if url_node:
-        # Status code is already correctly set by process_url - don't overwrite it
         db.commit()
 
 
