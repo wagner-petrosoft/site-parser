@@ -37,7 +37,7 @@ def process_url(url, job_id, db, robots):
         # Respect robots.txt rules
         if not robots.is_allowed("*", url):
             logger.info(f"Not allow to parse HTML by robots.txt")
-            return
+            return set()
 
         # Respect crawl delay
         time.sleep(robots.get_crawl_delay("*") or 1)
@@ -57,6 +57,9 @@ def process_url(url, job_id, db, robots):
             )
             db.add(url_node)
             db.flush()
+        else:
+            # Update status code for existing node
+            url_node.status_code = response.status_code
 
         # Find all links
         links = set()
@@ -158,7 +161,7 @@ def mark_url_visited(url, job_id, db):
     """Mark URL as visited in database"""
     url_node = db.query(UrlNode).filter_by(url=url, job_id=job_id).first()
     if url_node:
-        url_node.status_code = 200  # Mark as processed
+        # Status code is already correctly set by process_url - don't overwrite it
         db.commit()
 
 
