@@ -158,10 +158,18 @@ def get_pending_urls(job_id, db, limit=100):
 
 
 def mark_url_visited(url, job_id, db):
-    """Mark URL as visited in database"""
+    """Mark URL as visited in database.
+
+    If the URL has not yet received any HTTP status code (i.e. still ``None``),
+    assign a sentinel value so that :pyfunc:`get_pending_urls` will no longer
+    treat it as unprocessed.  A negative value (``-1``) is used to denote that
+    the request was skipped (robots.txt) or failed (timeout, SSL error, etc.).
+    """
     url_node = db.query(UrlNode).filter_by(url=url, job_id=job_id).first()
-    if url_node:
-        db.commit()
+    if url_node and url_node.status_code is None:
+        # Use -1 to indicate that the URL was processed but produced no valid HTTP response
+        url_node.status_code = -1
+    db.commit()
 
 
 @app.task(bind=True)
