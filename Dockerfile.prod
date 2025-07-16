@@ -24,6 +24,7 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
 ENV ENV=production
+ENV PYTHONPATH=/app
 ENV PATH="/home/appuser/.local/bin:/root/.local/bin:${PATH}"
 
 # Create non-root user
