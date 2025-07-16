@@ -10,6 +10,7 @@ import re
 import requests
 import time
 import logging
+import ssl
 
 
 logger = logging.getLogger("CrawlerTask")
@@ -145,9 +146,25 @@ def process_url(url, job_id, db, robots):
         raise e
 
 
+def get_pending_urls(job_id, db, limit=100):
+    """Get pending URLs from database with pagination"""
+    return db.query(UrlNode).filter_by(
+        job_id=job_id, 
+        status_code=None
+    ).limit(limit).all()
+
+
+def mark_url_visited(url, job_id, db):
+    """Mark URL as visited in database"""
+    url_node = db.query(UrlNode).filter_by(url=url, job_id=job_id).first()
+    if url_node:
+        url_node.status_code = 200  # Mark as processed
+        db.commit()
+
+
 @app.task(bind=True)
 def crawl_website(self, base_url):
-    """Main crawl task with progress tracking"""
+    """Main crawl task with improved memory management"""
     db = SessionLocal()
     robots = RobotExclusionRulesParser()
     robots.fetch(
@@ -164,43 +181,89 @@ def crawl_website(self, base_url):
         job = db.query(CrawlJob).filter_by(id=self.request.id).first()
         if not job:
             raise ValueError(f"Job {self.request.id} not found")
-        sitemap_urls = set(get_sitemap_urls(base_url))
+        
+        # Get initial URLs from sitemap
+        sitemap_urls = get_sitemap_urls(base_url)
         job.total_urls = len(sitemap_urls)
         job.status = "running"
         db.commit()
-        visitedPages = set()
-        # Process each URL
-        i = 0
-        while len(sitemap_urls) > 0:
+        
+        # Add initial URLs to database
+        for url in sitemap_urls:
+            normalized_url = normalize_url(url)
+            if urlparse(normalized_url).netloc == domain:
+                existing_node = db.query(UrlNode).filter_by(
+                    url=normalized_url, job_id=job.id
+                ).first()
+                if not existing_node:
+                    url_node = UrlNode(
+                        job_id=job.id,
+                        url=normalized_url,
+                        is_external=False,
+                        status_code=None,
+                    )
+                    db.add(url_node)
+        db.commit()
+        
+        processed_count = 0
+        
+        # Process URLs in batches to avoid memory issues
+        while True:
             if self.is_aborted:
                 job.status = "aborted"
                 db.commit()
                 return
-            url = normalize_url(sitemap_urls.pop())
-            if url in visitedPages:
-                continue
-
-            if urlparse(url).netloc != domain:
-                continue
-
-            validUrlsInPage = process_url(url, job.id, db, robots)
-            visitedPages.add(url)
-            sitemap_urls.update(validUrlsInPage - visitedPages)
-            i = i + 1
-            # Update progress
-            job.processed_urls = i + 1
-            job.total_urls = len(sitemap_urls) + len(visitedPages)
-            db.commit()
-
-            self.update_state(
-                state="PROGRESS",
-                meta={
-                    "progress": round((i + 1) / job.total_urls * 100, 2),
-                    "current_url": url,
-                    "processed": i + 1,
-                    "total": job.total_urls,
-                },
-            )
+                
+            # Get batch of pending URLs
+            pending_urls = get_pending_urls(job.id, db, limit=50)
+            if not pending_urls:
+                break
+                
+            for url_node in pending_urls:
+                if self.is_aborted:
+                    job.status = "aborted"
+                    db.commit()
+                    return
+                    
+                url = url_node.url
+                if urlparse(url).netloc != domain:
+                    continue
+                    
+                valid_urls = process_url(url, job.id, db, robots)
+                mark_url_visited(url, job.id, db)
+                processed_count += 1
+                
+                # Update progress
+                job.processed_urls = processed_count
+                job.total_urls = db.query(UrlNode).filter_by(job_id=job.id).count()
+                db.commit()
+                
+                self.update_state(
+                    state="PROGRESS",
+                    meta={
+                        "progress": round((processed_count / job.total_urls * 100), 2) if job.total_urls > 0 else 0,
+                        "current_url": url,
+                        "processed": processed_count,
+                        "total": job.total_urls,
+                    },
+                )
+                
+                # Add new URLs to database for processing
+                for new_url in valid_urls:
+                    normalized_new_url = normalize_url(urljoin(url, new_url))
+                    if urlparse(normalized_new_url).netloc == domain:
+                        existing_node = db.query(UrlNode).filter_by(
+                            url=normalized_new_url, job_id=job.id
+                        ).first()
+                        if not existing_node:
+                            new_url_node = UrlNode(
+                                job_id=job.id,
+                                url=normalized_new_url,
+                                is_external=False,
+                                status_code=None,
+                            )
+                            db.add(new_url_node)
+                db.commit()
 
         # Finalize
         job.status = "completed"

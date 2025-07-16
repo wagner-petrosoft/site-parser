@@ -25,12 +25,23 @@ def run_migrations():
     migration_files = sorted(os.listdir("db/migrations"))
     for filename in migration_files:
         if filename.endswith(".sql") and filename not in applied:
-            with open(f"db/migrations/{filename}") as f:
-                cur.execute(f.read())
-            cur.execute(
-                "INSERT INTO _migrations (version) VALUES (%s)", (filename,)
-            )
-            print(f"Applied migration: {filename}")
+            try:
+                with open(f"db/migrations/{filename}") as f:
+                    migration_sql = f.read()
+                
+                # Execute migration in a transaction
+                cur.execute(migration_sql)
+                
+                # Use parameterized query to insert migration record
+                cur.execute(
+                    "INSERT INTO _migrations (version) VALUES (%s)", 
+                    (filename,)
+                )
+                print(f"Applied migration: {filename}")
+            except Exception as e:
+                print(f"Failed to apply migration {filename}: {e}")
+                conn.rollback()
+                raise
 
     conn.commit()
     conn.close()
