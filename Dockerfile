@@ -6,6 +6,9 @@ RUN addgroup --system appgroup && \
 
 WORKDIR /app
 
+# Set PYTHONPATH to include the app directory for module resolution
+ENV PYTHONPATH=/app
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
